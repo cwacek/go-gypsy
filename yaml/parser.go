@@ -17,11 +17,63 @@ package yaml
 import (
 	"bufio"
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 )
+
+type Error struct {
+	File   string   // original filename, may be "" if a raw io.Reader was supplied
+	LineNo int      // line number
+	Lines  []string // offending line text, if LineNo >= 1
+	Err    error    // actual contained error
+}
+
+// attempts to extract file:lineno or returns ""
+func (err *Error) Loc() string {
+	switch {
+	case err.File != "" && err.LineNo > 0:
+		return fmt.Sprint(filepath.Base(err.File), ":", err.LineNo)
+	case err.File != "":
+		return filepath.Base(err.File)
+	case err.LineNo > 0:
+		return fmt.Sprint(err.LineNo)
+	}
+	return ""
+}
+
+// Error implements the "error" interface.
+func (err *Error) Error() string {
+	msg := err.Err.Error()
+	loc := err.Loc()
+	if loc == "" {
+		return msg
+	}
+	return fmt.Sprint(loc, ": ", msg)
+}
+
+// recoverParseError promotes panics into proper yaml errors
+func recoverParseError(lb *lineBuffer, perr *error) {
+	r := recover()
+	if r == nil {
+		return
+	}
+
+	var err *Error
+	switch r := r.(type) {
+	case *Error:
+		err = r
+	case error:
+		err = &Error{Err: r}
+	default:
+		err = &Error{Err: fmt.Errorf("%v", r)}
+	}
+
+	err.LineNo = lb.current.lineno+1 // editors favor counting from line 1..
+	err.Lines = []string{string(lb.current.line)}
+	*perr = err
+}
 
 // Parse returns a root-level Node parsed from the lines read from r.  In
 // general, this will be done for you by one of the File constructors.
@@ -29,20 +81,7 @@ func Parse(r io.Reader) (node Node, err error) {
 	lb := &lineBuffer{
 		Reader: bufio.NewReader(r),
 	}
-
-	defer func() {
-		if r := recover(); r != nil {
-			switch r := r.(type) {
-			case error:
-				err = r
-			case string:
-				err = errors.New(r)
-			default:
-				err = fmt.Errorf("%v", r)
-			}
-		}
-	}()
-
+	defer recoverParseError(lb, &err)
 	node = parseNode(lb, 0, nil)
 	return
 }
@@ -303,6 +342,7 @@ func getType(line []byte) (typ, split int) {
 type lineBuffer struct {
 	*bufio.Reader
 	readLines int
+	current   *indentedLine
 	pending   *indentedLine
 }
 
@@ -351,6 +391,7 @@ func (lb *lineBuffer) Next(min int) (next *indentedLine) {
 	if next.indent < min {
 		return nil
 	}
+	lb.current = next
 	lb.pending = nil
 	return
 }
