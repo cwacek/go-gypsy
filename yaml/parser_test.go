@@ -171,6 +171,45 @@ var parseTests = []struct {
 			"test: localhost\n",
 		Output: "test: localhost\n",
 	},
+	{
+		Input: `"Package[libtool]": !ruby/object:Puppet::Resource::Status
+  change_count: 0
+  changed: false
+  evaluation_time: 0.113961`,
+		Output: `"Package[libtool]":
+  change_count:    0
+  changed:         false
+  evaluation_time: 0.113961
+`,
+	},
+	{
+		Input: `--- !ruby/object:Puppet::Transaction::Report
+  configuration_version: 1385903200
+  host: localhost
+  kind: apply
+  logs:
+    - !ruby/object:Puppet::Util::Log
+      level: !ruby/sym notice
+      message: Finished catalog run in 3.90 seconds
+      source: Puppet
+      count: !!int 1234
+      tags:
+        - notice
+      time: 2013-12-04 06:49:02.258695 -05:00
+`,
+		Output: `configuration_version: 1385903200
+host:                  localhost
+kind:                  apply
+logs:
+  - count:   1234
+    level:   notice
+    message: Finished catalog run in 3.90 seconds
+    source:  Puppet
+    time:    2013-12-04 06:49:02.258695 -05:00
+    tags:
+      - notice
+`,
+	},
 }
 
 func TestParse(t *testing.T) {

@@ -92,12 +92,12 @@ const (
 	typUnknown = iota
 	typSequence
 	typMapping
-	typDocument
 	typScalar
+	typDocument
 )
 
 var typNames = []string{
-	"Unknown", "Sequence", "Mapping", "Scalar",
+	"Unknown", "Sequence", "Mapping", "Scalar", "Document",
 }
 
 type lineReader interface {
@@ -273,6 +273,23 @@ func parseNode(r lineReader, ind int, initial Node) (node Node) {
 	return
 }
 
+func getScalarType(line []byte) (typ, split int) {
+
+	switch {
+	default:
+		typ = typScalar
+	}
+
+	split = bytes.IndexAny(line, " ")
+	if split < 0 {
+		// This is the only thing on the line, so its
+		// an object not a type designator
+		typ = typUnknown
+		split = len(line)
+	}
+	return
+}
+
 func getType(line []byte) (typ, split int) {
 	if len(line) == 0 {
 		return
@@ -290,9 +307,15 @@ func getType(line []byte) (typ, split int) {
 		return
 	}
 
+	if line[0] == '!' {
+		typ, split = getScalarType(line)
+		return
+	}
+
 	typ = typScalar
 
-	if line[0] == ' ' || line[0] == '"' {
+	// It's possible for a key to be quoted
+	if line[0] == ' ' {
 		return
 	}
 
@@ -301,45 +324,44 @@ func getType(line []byte) (typ, split int) {
 	// things like "foo:" and "foo :" are mappings
 	// everything else is a scalar
 
-	idx := bytes.IndexAny(line, " \":")
-	if idx < 0 {
-		return
-	}
+	var (
+		start  = 0
+		quoted = false
+	)
 
-	if line[idx] == '"' {
-		return
-	}
+	for {
+		fmt.Printf("looking for mapping in: %s\n", line[start:])
+		idx := bytes.IndexAny(line[start:], " \":")
+		if idx < 0 {
+			return
+		}
+		fmt.Printf("Considering ':' at position %d + %d in line of length %d\n",
+			start, idx, len(line))
 
-	if line[idx] == ':' {
-		typ = typMapping
-		split = idx
-	} else if line[idx] == ' ' {
-		// we have a space
-		// need to see if its all spaces until a :
-		for i := idx; i < len(line); i++ {
-			switch ch := line[i]; ch {
-			case ' ':
-				continue
-			case ':':
-				// only split on colons followed by a space
-				if i+1 < len(line) && line[i+1] != ' ' {
-					continue
+		switch line[start+idx] {
+		case '"':
+			quoted = !quoted
+
+		case ':':
+			if !quoted {
+				fmt.Printf("line[start+idx]: %c\n", line[start+idx])
+				switch {
+				case len(line) == start+idx+1:
+					fallthrough
+				case line[start+idx+1] == ' ':
+					typ = typMapping
+					split = start + idx
+					return
 				}
-
-				typ = typMapping
-				split = i
-				break
-			default:
-				break
 			}
 		}
-	}
 
-	if typ == typMapping && split+1 < len(line) && line[split+1] != ' ' {
-		typ = typScalar
-		split = 0
-	}
+		start += idx + 1
 
+		if start == len(line) {
+			return
+		}
+	}
 	return
 }
 
