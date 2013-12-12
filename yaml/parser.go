@@ -70,7 +70,7 @@ func recoverParseError(lb *lineBuffer, perr *error) {
 		err = &Error{Err: fmt.Errorf("%v", r)}
 	}
 
-	err.LineNo = lb.current.lineno+1 // editors favor counting from line 1..
+	err.LineNo = lb.current.lineno + 1 // editors favor counting from line 1..
 	err.Lines = []string{string(lb.current.line)}
 	*perr = err
 }
@@ -169,7 +169,7 @@ func parseNode(r lineReader, ind int, initial Node) (node Node) {
 							break
 						}
 						if lastLine != -1 {
-							text += strings.Repeat("\n", l.lineno - lastLine)
+							text += strings.Repeat("\n", l.lineno-lastLine)
 						}
 						text += string(l.line)
 						lastLine = l.lineno
