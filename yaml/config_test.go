@@ -22,7 +22,7 @@ var dummyConfigFile = `
 mapping:
   key1: value1
   key2: value2
-  key3: 5
+  key3: !!int 5
   key4: true
   key5: false
 list:

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -94,10 +95,15 @@ const (
 	typMapping
 	typScalar
 	typDocument
+	typScalarInt
+	typScalarNull
+	typScalarBool
+	typScalarFloat
 )
 
 var typNames = []string{
 	"Unknown", "Sequence", "Mapping", "Scalar", "Document",
+	"Integer", "Null", "Boolean", "Float",
 }
 
 type lineReader interface {
@@ -122,6 +128,7 @@ func parseNode(r lineReader, ind int, initial Node) (node Node) {
 	// read lines
 	for {
 		line := r.Next(ind)
+		fmt.Printf("Handling: '%s' at %d\n", line, ind)
 		if line == nil {
 			break
 		}
@@ -141,8 +148,11 @@ func parseNode(r lineReader, ind int, initial Node) (node Node) {
 		var inlineValue func([]byte)
 		inlineValue = func(partial []byte) {
 			// TODO(kevlar): This can be a for loop now
+			fmt.Printf("Looking for type of partial '%s'\n", partial)
 			vtyp, brk := getType(partial)
+			fmt.Printf("Found %s ending at %d\n", typNames[vtyp], brk)
 			begin, end := partial[:brk], partial[brk:]
+			fmt.Printf("Have begining '%s' and end '%s'\n", begin, end)
 
 			if vtyp == typMapping {
 				end = end[1:]
@@ -152,6 +162,10 @@ func parseNode(r lineReader, ind int, initial Node) (node Node) {
 			switch vtyp {
 			case typScalar:
 				types = append(types, typScalar)
+				pieces = append(pieces, string(end))
+				return
+			case typScalarInt:
+				types = append(types, typScalarInt)
 				pieces = append(pieces, string(end))
 				return
 			case typMapping:
@@ -212,6 +226,16 @@ func parseNode(r lineReader, ind int, initial Node) (node Node) {
 					break
 				}
 				current = Scalar(piece)
+			case typScalarInt:
+				if _, ok := current.(Scalar); current != nil && !ok {
+					panic("cannot append scalar to non-scalar node")
+				}
+
+				if num, err := strconv.Atoi(string(piece)); err != nil {
+					panic(fmt.Sprintf("Unable to convert scalar int: %s", err))
+				} else {
+					current = Scalar(num)
+				}
 			case typMapping:
 				var mapNode Map
 				var ok bool
@@ -219,6 +243,7 @@ func parseNode(r lineReader, ind int, initial Node) (node Node) {
 
 				// Get the current map, if there is one
 				if mapNode, ok = current.(Map); current != nil && !ok {
+					fmt.Printf("Invalid conversion from '%v' to Map", current)
 					_ = current.(Map) // panic
 				} else if current == nil {
 					mapNode = make(Map)
@@ -276,6 +301,14 @@ func parseNode(r lineReader, ind int, initial Node) (node Node) {
 func getScalarType(line []byte) (typ, split int) {
 
 	switch {
+	case bytes.Equal(line, []byte("!!int")) == true:
+		typ = typScalarInt
+	case bytes.Equal(line, []byte("!!bool")) == true:
+		typ = typScalarBool
+	case bytes.Equal(line, []byte("!!float")) == true:
+		typ = typScalarFloat
+	case bytes.Equal(line, []byte("!!null")) == true:
+		typ = typScalarNull
 	default:
 		typ = typScalar
 	}

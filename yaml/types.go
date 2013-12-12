@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -100,6 +101,14 @@ func (node List) write(out io.Writer, firstind, nextind int) {
 		ind = nextind
 		value.write(out, 0, ind+2)
 	}
+}
+
+type ScalarInt int
+
+func (node ScalarInt) String() string { return strconv.Itoa(int(node)) }
+
+func (node ScalarInt) write(out io.Writer, ind, _ int) {
+	fmt.Fprintf(out, "%s%d\n", strings.Repeat(" ", ind), int(node))
 }
 
 // A Scalar is a YAML Scalar.
