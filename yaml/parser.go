@@ -92,6 +92,7 @@ const (
 	typUnknown = iota
 	typSequence
 	typMapping
+	typDocument
 	typScalar
 )
 
@@ -274,6 +275,12 @@ func parseNode(r lineReader, ind int, initial Node) (node Node) {
 
 func getType(line []byte) (typ, split int) {
 	if len(line) == 0 {
+		return
+	}
+
+	if len(line) > 2 && bytes.Equal(line[0:3], []byte("---")) {
+		typ = typDocument
+		split = 1
 		return
 	}
 
